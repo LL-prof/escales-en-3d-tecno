@@ -6,7 +6,7 @@
 <title>Escalas 3D PRO</title>
 
 <style>
-html,body{margin:0;height:100%;overflow:hidden;font-family:Arial}
+html,body{margin:0;height:100%;overflow:hidden;font-family:Arial;background:#eaeaea}
 canvas{display:block}
 
 .label{
@@ -66,7 +66,7 @@ import {TransformControls} from "https://cdn.jsdelivr.net/npm/three@0.160.0/exam
 
 /* ESCENA */
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xf0f0f0);
+scene.background = new THREE.Color(0xeaeaea);
 
 const camera = new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,100);
 camera.position.set(10,10,14);
@@ -76,28 +76,80 @@ renderer.setSize(innerWidth,innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera,renderer.domElement);
+scene.add(new THREE.AmbientLight(0xffffff,0.9));
 
-scene.add(new THREE.AmbientLight(0xffffff,0.8));
-const light = new THREE.DirectionalLight(0xffffff,0.6);
-light.position.set(10,20,10);
-scene.add(light);
+/* FIGURAS (niveles) */
+const levels = [
+  () => new THREE.BoxGeometry(2,2,2),
+  () => new THREE.BoxGeometry(2,3,1),
+  () => new THREE.BoxGeometry(1,4,1),
+  () => createLShape(),
+  () => createArrow()
+];
 
-scene.add(new THREE.GridHelper(20,20));
+let level = 0;
 
-/* FIGURAS */
-const geo = new THREE.BoxGeometry(2,2,2);
-
-function create(x){
+function createMesh(geo,x){
   const mat = new THREE.MeshStandardMaterial({color:0x4da3ff});
   const m = new THREE.Mesh(geo,mat);
-  m.position.set(x,1,0);
+  m.position.set(x,0,0);
   scene.add(m);
   return m;
 }
 
-const left = create(-5);
-const center = create(0);
-const right = create(5);
+let left,center,right;
+
+function loadLevel(){
+  if(left) scene.remove(left);
+  if(center) scene.remove(center);
+  if(right) scene.remove(right);
+
+  const geo = levels[level]();
+
+  left = createMesh(geo.clone(),-5);
+  center = createMesh(geo.clone(),0);
+  right = createMesh(geo.clone(),5);
+
+  left.scale.set(1,1,1);
+  right.scale.set(1,1,1);
+
+  transform.detach();
+}
+
+function createLShape(){
+  const g = new THREE.Group();
+  const m1 = new THREE.Mesh(new THREE.BoxGeometry(2,1,1));
+  const m2 = new THREE.Mesh(new THREE.BoxGeometry(1,2,1));
+  m2.position.set(-0.5,0.5,0);
+  g.add(m1,m2);
+  return mergeGroup(g);
+}
+
+function createArrow(){
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.BoxGeometry(2,1,1));
+  const head = new THREE.Mesh(new THREE.ConeGeometry(1,2,4));
+  head.rotation.z = Math.PI/2;
+  head.position.set(1.5,0,0);
+  g.add(base,head);
+  return mergeGroup(g);
+}
+
+function mergeGroup(group){
+  const geo = new THREE.BufferGeometry();
+  group.updateMatrixWorld();
+  const geos = [];
+
+  group.traverse(c=>{
+    if(c.isMesh){
+      const g = c.geometry.clone();
+      g.applyMatrix4(c.matrixWorld);
+      geos.push(g);
+    }
+  });
+
+  return THREE.BufferGeometryUtils.mergeGeometries(geos);
+}
 
 /* TRANSFORM */
 const transform = new TransformControls(camera,renderer.domElement);
@@ -108,7 +160,7 @@ transform.addEventListener("dragging-changed", e=>{
   controls.enabled = !e.value;
 });
 
-/* SELECCIÓN */
+/* CLICK */
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
@@ -121,16 +173,17 @@ renderer.domElement.addEventListener("click",(e)=>{
 
   if(hits.length){
     transform.attach(hits[0].object);
+  }else{
+    transform.detach();
   }
 });
 
 /* MEDIDAS */
 function getSize(obj){
-  return {
-    x:(obj.scale.x*2).toFixed(1),
-    y:(obj.scale.y*2).toFixed(1),
-    z:(obj.scale.z*2).toFixed(1)
-  };
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  return size;
 }
 
 /* LABELS */
@@ -138,30 +191,29 @@ const labelLeft = document.getElementById("labelLeft");
 const labelCenter = document.getElementById("labelCenter");
 const labelRight = document.getElementById("labelRight");
 
-function updateLabel(obj, label){
+function updateLabel(obj,label){
   const vector = obj.position.clone().project(camera);
   const x = (vector.x*0.5+0.5)*innerWidth;
   const y = (-vector.y*0.5+0.5)*innerHeight;
 
   const s = getSize(obj);
-  label.innerText = `${s.x} × ${s.y} × ${s.z}`;
+  label.innerText = `${s.x.toFixed(1)} × ${s.y.toFixed(1)} × ${s.z.toFixed(1)}`;
   label.style.left = x+"px";
   label.style.top = y+"px";
 }
 
 /* CHECK */
 window.check = function(){
-
   const base = getSize(center);
   const half = getSize(left);
   const double = getSize(right);
 
-  let okL =
+  const okL =
     Math.abs(half.x - base.x/2)<0.3 &&
     Math.abs(half.y - base.y/2)<0.3 &&
     Math.abs(half.z - base.z/2)<0.3;
 
-  let okR =
+  const okR =
     Math.abs(double.x - base.x*2)<0.3 &&
     Math.abs(double.y - base.y*2)<0.3 &&
     Math.abs(double.z - base.z*2)<0.3;
@@ -174,6 +226,13 @@ window.check = function(){
   if(okL && okR){
     f.innerText="🔥 PERFECTO";
     f.style.color="green";
+
+    setTimeout(()=>{
+      level++;
+      if(level>=levels.length) level=0;
+      loadLevel();
+    },1000);
+
   }else{
     f.innerText="❌ Revisa proporciones";
     f.style.color="red";
@@ -198,6 +257,8 @@ addEventListener("resize",()=>{
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
+
+loadLevel();
 
 </script>
 
