@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Escalas 3D</title>
+<title>Escalas 3D - Niveles</title>
 
 <style>
-html,body{margin:0;height:100%;overflow:hidden;font-family:Arial;background:#eaeaea}
+html,body{margin:0;height:100%;overflow:hidden;font-family:Arial}
 canvas{display:block}
 
 .label{
@@ -26,6 +26,7 @@ canvas{display:block}
   background:white;
   padding:10px;
   border-radius:10px;
+  text-align:center;
 }
 </style>
 
@@ -57,7 +58,7 @@ import {TransformControls} from "https://cdn.jsdelivr.net/npm/three@0.160.0/exam
 
 /* ESCENA */
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xeaeaea);
+scene.background = new THREE.Color(0xf0f0f0);
 
 const camera = new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,100);
 camera.position.set(8,8,12);
@@ -67,8 +68,9 @@ renderer.setSize(innerWidth,innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera,renderer.domElement);
-
 scene.add(new THREE.AmbientLight(0xffffff,1));
+
+scene.add(new THREE.GridHelper(20,20));
 
 /* TRANSFORM */
 const transform = new TransformControls(camera,renderer.domElement);
@@ -79,13 +81,7 @@ transform.addEventListener("dragging-changed", e=>{
   controls.enabled = !e.value;
 });
 
-/* FIGURAS */
-let current = [];
-
-function clearObjects(){
-  current.forEach(o=>scene.remove(o));
-  current = [];
-}
+/* ----------- FORMAS ----------- */
 
 function cube(){
   return new THREE.Mesh(
@@ -94,19 +90,73 @@ function cube(){
   );
 }
 
+function rect(){
+  const m = cube();
+  m.scale.set(1,1.5,0.5);
+  return m;
+}
+
+function tower(){
+  const m = cube();
+  m.scale.set(0.5,2,0.5);
+  return m;
+}
+
+function L(){
+  const g = new THREE.Group();
+
+  const a = cube();
+  a.scale.set(1,0.5,0.5);
+
+  const b = cube();
+  b.scale.set(0.5,1.5,0.5);
+  b.position.y = 2;
+
+  g.add(a,b);
+  return g;
+}
+
+function arrow(){
+  const g = new THREE.Group();
+
+  const base = cube();
+  base.scale.set(1.5,0.5,0.5);
+
+  const head = new THREE.Mesh(
+    new THREE.ConeGeometry(1,2,4),
+    new THREE.MeshStandardMaterial({color:0x4da3ff})
+  );
+  head.rotation.z = Math.PI/2;
+  head.position.x = 3;
+
+  g.add(base,head);
+  return g;
+}
+
+const levels = [cube, rect, tower, L, arrow];
+let level = 0;
+
+/* ----------- CARGA ----------- */
+
+let current = [];
+
 function load(){
-  clearObjects();
+  current.forEach(o=>scene.remove(o));
 
-  const left = cube();
-  const center = cube();
-  const right = cube();
+  const shape = levels[level];
 
-  left.position.x = -4;
-  right.position.x = 4;
+  const left = shape();
+  const center = shape();
+  const right = shape();
+
+  left.position.set(-4,1,0);
+  center.position.set(0,1,0);
+  right.position.set(4,1,0);
 
   scene.add(left,center,right);
 
   current = [left,center,right];
+  transform.detach();
 }
 
 /* CLICK */
@@ -118,12 +168,14 @@ renderer.domElement.addEventListener("click",(e)=>{
   mouse.y = -(e.clientY/innerHeight)*2+1;
 
   raycaster.setFromCamera(mouse,camera);
-  const hits = raycaster.intersectObjects(current);
+  const hits = raycaster.intersectObjects(current,true);
 
   if(hits.length){
     const obj = hits[0].object;
-    if(obj !== current[1]){ // no tocar centro
-      transform.attach(obj);
+    const parent = current.find(o=>o===obj || o.children.includes(obj));
+
+    if(parent && parent !== current[1]){
+      transform.attach(parent);
     }
   }else{
     transform.detach();
@@ -158,11 +210,18 @@ window.check = function(){
   const okL = Math.abs(ls.x-bs.x/2)<0.3 && Math.abs(ls.y-bs.y/2)<0.3 && Math.abs(ls.z-bs.z/2)<0.3;
   const okR = Math.abs(rs.x-bs.x*2)<0.3 && Math.abs(rs.y-bs.y*2)<0.3 && Math.abs(rs.z-bs.z*2)<0.3;
 
-  l.material.color.set(okL?"green":"red");
-  r.material.color.set(okR?"green":"red");
+  l.traverse(m=>m.material && m.material.color.set(okL?"green":"red"));
+  r.traverse(m=>m.material && m.material.color.set(okR?"green":"red"));
 
   if(okL && okR){
-    document.getElementById("feedback").innerText="🔥 PERFECTO";
+    document.getElementById("feedback").innerText="🔥 NIVEL SUPERADO";
+
+    setTimeout(()=>{
+      level = (level+1)%levels.length;
+      load();
+    },1000);
+  }else{
+    document.getElementById("feedback").innerText="❌ Revisa proporciones";
   }
 };
 
@@ -180,6 +239,7 @@ function animate(){
 animate();
 
 load();
+
 </script>
 
 </body>
