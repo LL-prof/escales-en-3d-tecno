@@ -68,62 +68,46 @@ document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera,renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0xffffff,0.9));
-
-/* FIGURAS */
-function cube(){
-  return new THREE.Mesh(new THREE.BoxGeometry(2,2,2), new THREE.MeshStandardMaterial({color:0x4da3ff}));
-}
-
-function L(){
-  const g = new THREE.Group();
-  const m1 = cube();
-  const m2 = cube();
-  m2.scale.y = 2;
-  m2.position.y = 2;
-  g.add(m1,m2);
-  return g;
-}
-
-function arrow(){
-  const g = new THREE.Group();
-  const base = cube();
-  base.scale.x = 2;
-  const head = new THREE.Mesh(new THREE.ConeGeometry(1,2,4), new THREE.MeshStandardMaterial({color:0x4da3ff}));
-  head.rotation.z = Math.PI/2;
-  head.position.x = 3;
-  g.add(base,head);
-  return g;
-}
-
-const shapes = [cube, L, arrow];
-let level = 0;
-
-let left,center,right;
-
-function load(){
-  scene.clear();
-  scene.add(new THREE.AmbientLight(0xffffff,0.9));
-  scene.add(transform);
-
-  const shape = shapes[level];
-
-  left = shape(); left.position.x = -4;
-  center = shape();
-  right = shape(); right.position.x = 4;
-
-  scene.add(left,center,right);
-
-  transform.detach();
-}
+scene.add(new THREE.AmbientLight(0xffffff,1));
 
 /* TRANSFORM */
 const transform = new TransformControls(camera,renderer.domElement);
 transform.setMode("scale");
+scene.add(transform);
 
 transform.addEventListener("dragging-changed", e=>{
   controls.enabled = !e.value;
 });
+
+/* FIGURAS */
+let current = [];
+
+function clearObjects(){
+  current.forEach(o=>scene.remove(o));
+  current = [];
+}
+
+function cube(){
+  return new THREE.Mesh(
+    new THREE.BoxGeometry(2,2,2),
+    new THREE.MeshStandardMaterial({color:0x4da3ff})
+  );
+}
+
+function load(){
+  clearObjects();
+
+  const left = cube();
+  const center = cube();
+  const right = cube();
+
+  left.position.x = -4;
+  right.position.x = 4;
+
+  scene.add(left,center,right);
+
+  current = [left,center,right];
+}
 
 /* CLICK */
 const raycaster = new THREE.Raycaster();
@@ -134,10 +118,13 @@ renderer.domElement.addEventListener("click",(e)=>{
   mouse.y = -(e.clientY/innerHeight)*2+1;
 
   raycaster.setFromCamera(mouse,camera);
-  const hits = raycaster.intersectObjects([left,right],true);
+  const hits = raycaster.intersectObjects(current);
 
   if(hits.length){
-    transform.attach(hits[0].object.parent || hits[0].object);
+    const obj = hits[0].object;
+    if(obj !== current[1]){ // no tocar centro
+      transform.attach(obj);
+    }
   }else{
     transform.detach();
   }
@@ -162,22 +149,20 @@ function label(obj,el){
 
 /* CHECK */
 window.check = function(){
-  const b = size(center);
-  const l = size(left);
-  const r = size(right);
+  const [l,c,r] = current;
 
-  const okL = Math.abs(l.x-b.x/2)<0.3 && Math.abs(l.y-b.y/2)<0.3 && Math.abs(l.z-b.z/2)<0.3;
-  const okR = Math.abs(r.x-b.x*2)<0.3 && Math.abs(r.y-b.y*2)<0.3 && Math.abs(r.z-b.z*2)<0.3;
+  const bs = size(c);
+  const ls = size(l);
+  const rs = size(r);
 
-  left.traverse(m=>m.material && (m.material.color.set(okL?"green":"red")));
-  right.traverse(m=>m.material && (m.material.color.set(okR?"green":"red")));
+  const okL = Math.abs(ls.x-bs.x/2)<0.3 && Math.abs(ls.y-bs.y/2)<0.3 && Math.abs(ls.z-bs.z/2)<0.3;
+  const okR = Math.abs(rs.x-bs.x*2)<0.3 && Math.abs(rs.y-bs.y*2)<0.3 && Math.abs(rs.z-bs.z*2)<0.3;
+
+  l.material.color.set(okL?"green":"red");
+  r.material.color.set(okR?"green":"red");
 
   if(okL && okR){
     document.getElementById("feedback").innerText="🔥 PERFECTO";
-    setTimeout(()=>{
-      level = (level+1)%shapes.length;
-      load();
-    },1000);
   }
 };
 
@@ -186,19 +171,13 @@ function animate(){
   requestAnimationFrame(animate);
   controls.update();
 
-  label(left,l1);
-  label(center,l2);
-  label(right,l3);
+  label(current[0],l1);
+  label(current[1],l2);
+  label(current[2],l3);
 
   renderer.render(scene,camera);
 }
 animate();
-
-addEventListener("resize",()=>{
-  camera.aspect=innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
-});
 
 load();
 </script>
