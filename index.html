@@ -3,16 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Escalas 3D</title>
+<title>Escalas 3D PRO</title>
 
 <style>
 html,body{margin:0;height:100%;overflow:hidden;font-family:Arial}
 canvas{display:block}
 
-#ui{
-  position:fixed;top:10px;left:50%;
-  transform:translateX(-50%);
+.label{
+  position:absolute;
   background:rgba(255,255,255,.9);
+  padding:4px 8px;
+  border-radius:6px;
+  font-weight:bold;
+  font-size:12px;
+}
+
+#ui{
+  position:fixed;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  background:white;
   padding:10px 20px;
   border-radius:12px;
   box-shadow:0 4px 10px rgba(0,0,0,.2);
@@ -20,17 +31,10 @@ canvas{display:block}
 }
 
 button{
-  padding:10px 15px;
-  margin:5px;
-  border-radius:10px;
-  border:2px solid #ccc;
+  padding:8px 15px;
+  margin-top:5px;
   font-weight:bold;
   cursor:pointer;
-}
-
-.info{
-  font-weight:bold;
-  margin-top:5px;
 }
 </style>
 
@@ -46,27 +50,32 @@ button{
 <body>
 
 <div id="ui">
-  <div>⬅️ MITAD (1:2) | MODELO | DOBLE (2:1) ➡️</div>
+  ⬅️ MITAD | MODELO | DOBLE ➡️<br>
   <button onclick="check()">✔ COMPROBAR</button>
   <div id="feedback"></div>
 </div>
 
+<div id="labelLeft" class="label"></div>
+<div id="labelCenter" class="label"></div>
+<div id="labelRight" class="label"></div>
+
 <script type="module">
 import * as THREE from "three";
 import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+import {TransformControls} from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/TransformControls.js";
 
 /* ESCENA */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf0f0f0);
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,100);
 camera.position.set(10,10,14);
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight);
+renderer.setSize(innerWidth,innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const controls = new OrbitControls(camera, renderer.domElement);
+const controls = new OrbitControls(camera,renderer.domElement);
 
 scene.add(new THREE.AmbientLight(0xffffff,0.8));
 const light = new THREE.DirectionalLight(0xffffff,0.6);
@@ -78,17 +87,42 @@ scene.add(new THREE.GridHelper(20,20));
 /* FIGURAS */
 const geo = new THREE.BoxGeometry(2,2,2);
 
-function createFigure(x){
+function create(x){
   const mat = new THREE.MeshStandardMaterial({color:0x4da3ff});
-  const m = new THREE.Mesh(geo, mat);
+  const m = new THREE.Mesh(geo,mat);
   m.position.set(x,1,0);
   scene.add(m);
   return m;
 }
 
-const left = createFigure(-5);
-const center = createFigure(0);
-const right = createFigure(5);
+const left = create(-5);
+const center = create(0);
+const right = create(5);
+
+/* TRANSFORM */
+const transform = new TransformControls(camera,renderer.domElement);
+transform.setMode("scale");
+scene.add(transform);
+
+transform.addEventListener("dragging-changed", e=>{
+  controls.enabled = !e.value;
+});
+
+/* SELECCIÓN */
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+renderer.domElement.addEventListener("click",(e)=>{
+  mouse.x = (e.clientX/innerWidth)*2-1;
+  mouse.y = -(e.clientY/innerHeight)*2+1;
+
+  raycaster.setFromCamera(mouse,camera);
+  const hits = raycaster.intersectObjects([left,right]);
+
+  if(hits.length){
+    transform.attach(hits[0].object);
+  }
+});
 
 /* MEDIDAS */
 function getSize(obj){
@@ -99,64 +133,62 @@ function getSize(obj){
   };
 }
 
-/* INTERACCIÓN SIMPLE (teclas) */
-window.addEventListener("keydown",(e)=>{
-  const step=0.1;
+/* LABELS */
+const labelLeft = document.getElementById("labelLeft");
+const labelCenter = document.getElementById("labelCenter");
+const labelRight = document.getElementById("labelRight");
 
-  if(e.key==="a") left.scale.x+=step;
-  if(e.key==="z") left.scale.x-=step;
+function updateLabel(obj, label){
+  const vector = obj.position.clone().project(camera);
+  const x = (vector.x*0.5+0.5)*innerWidth;
+  const y = (-vector.y*0.5+0.5)*innerHeight;
 
-  if(e.key==="s") left.scale.y+=step;
-  if(e.key==="x") left.scale.y-=step;
-
-  if(e.key==="d") left.scale.z+=step;
-  if(e.key==="c") left.scale.z-=step;
-
-  if(e.key==="j") right.scale.x+=step;
-  if(e.key==="n") right.scale.x-=step;
-
-  if(e.key==="k") right.scale.y+=step;
-  if(e.key==="m") right.scale.y-=step;
-
-  if(e.key==="l") right.scale.z+=step;
-  if(e.key=",") right.scale.z-=step;
-});
+  const s = getSize(obj);
+  label.innerText = `${s.x} × ${s.y} × ${s.z}`;
+  label.style.left = x+"px";
+  label.style.top = y+"px";
+}
 
 /* CHECK */
-function check(){
+window.check = function(){
 
   const base = getSize(center);
   const half = getSize(left);
   const double = getSize(right);
 
-  let okLeft =
-    Math.abs(half.x - base.x/2) < 0.3 &&
-    Math.abs(half.y - base.y/2) < 0.3 &&
-    Math.abs(half.z - base.z/2) < 0.3;
+  let okL =
+    Math.abs(half.x - base.x/2)<0.3 &&
+    Math.abs(half.y - base.y/2)<0.3 &&
+    Math.abs(half.z - base.z/2)<0.3;
 
-  let okRight =
-    Math.abs(double.x - base.x*2) < 0.3 &&
-    Math.abs(double.y - base.y*2) < 0.3 &&
-    Math.abs(double.z - base.z*2) < 0.3;
+  let okR =
+    Math.abs(double.x - base.x*2)<0.3 &&
+    Math.abs(double.y - base.y*2)<0.3 &&
+    Math.abs(double.z - base.z*2)<0.3;
 
-  left.material.color.set(okLeft ? "green":"red");
-  right.material.color.set(okRight ? "green":"red");
+  left.material.color.set(okL?"green":"red");
+  right.material.color.set(okR?"green":"red");
 
-  const feedback = document.getElementById("feedback");
+  const f = document.getElementById("feedback");
 
-  if(okLeft && okRight){
-    feedback.innerText="🔥 PERFECTO";
-    feedback.style.color="green";
+  if(okL && okR){
+    f.innerText="🔥 PERFECTO";
+    f.style.color="green";
   }else{
-    feedback.innerText="❌ Revisa proporciones";
-    feedback.style.color="red";
+    f.innerText="❌ Revisa proporciones";
+    f.style.color="red";
   }
-}
+};
 
 /* LOOP */
 function animate(){
   requestAnimationFrame(animate);
   controls.update();
+
+  updateLabel(left,labelLeft);
+  updateLabel(center,labelCenter);
+  updateLabel(right,labelRight);
+
   renderer.render(scene,camera);
 }
 animate();
