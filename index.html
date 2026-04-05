@@ -84,85 +84,48 @@ transform.addEventListener("dragging-changed", e=>{
   controls.enabled = !e.value;
 });
 
-/* -------- FORMAS -------- */
+/* GEOMETRÍA BASE */
+const geo = new THREE.BoxGeometry(2,2,2);
 
-function cube(){
-  return new THREE.Mesh(
-    new THREE.BoxGeometry(2,2,2),
-    new THREE.MeshStandardMaterial({color:0x4da3ff})
-  );
-}
+/* NIVELES (SIN GROUP → ESTABLE) */
+const levels = [
+  {x:1,y:1,z:1},      // cubo
+  {x:1,y:1.5,z:0.5},  // rectángulo
+  {x:0.5,y:2,z:0.5},  // torre
+  {x:2,y:0.5,z:1},    // plano
+  {x:1,y:2,z:1}       // alto
+];
 
-function rect(){
-  const m = cube();
-  m.scale.set(1,1.5,0.5);
-  return m;
-}
-
-function tower(){
-  const m = cube();
-  m.scale.set(0.5,2,0.5);
-  return m;
-}
-
-function L(){
-  const g = new THREE.Group();
-
-  const a = cube();
-  a.scale.set(1,0.5,0.5);
-
-  const b = cube();
-  b.scale.set(0.5,1.5,0.5);
-  b.position.y = 2;
-
-  g.add(a,b);
-  return g;
-}
-
-function arrow(){
-  const g = new THREE.Group();
-
-  const base = cube();
-  base.scale.set(1.5,0.5,0.5);
-
-  const head = new THREE.Mesh(
-    new THREE.ConeGeometry(1,2,4),
-    new THREE.MeshStandardMaterial({color:0x4da3ff})
-  );
-  head.rotation.z = Math.PI/2;
-  head.position.x = 3;
-
-  g.add(base,head);
-  return g;
-}
-
-const levels = [cube, rect, tower, L, arrow];
 let level = 0;
 
-/* -------- CARGA -------- */
+let left, center, right;
 
-let current = [];
+function createFigure(x){
+  const mat = new THREE.MeshStandardMaterial({color:0x4da3ff});
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x,1,0);
+  scene.add(m);
+  return m;
+}
 
 function loadLevel(){
 
-  current.forEach(o=>scene.remove(o));
+  if(left) scene.remove(left);
+  if(center) scene.remove(center);
+  if(right) scene.remove(right);
 
-  const shape = levels[level];
+  const s = levels[level];
 
-  const left = shape();
-  const center = shape();
-  const right = shape();
+  left = createFigure(-5);
+  center = createFigure(0);
+  right = createFigure(5);
 
-  left.position.set(-5,1,0);
-  center.position.set(0,1,0);
-  right.position.set(5,1,0);
-
-  scene.add(left,center,right);
-
-  current = [left,center,right];
+  center.scale.set(s.x,s.y,s.z);
 
   transform.detach();
 }
+
+loadLevel();
 
 /* CLICK */
 const raycaster = new THREE.Raycaster();
@@ -173,27 +136,22 @@ renderer.domElement.addEventListener("click",(e)=>{
   mouse.y = -(e.clientY/innerHeight)*2+1;
 
   raycaster.setFromCamera(mouse,camera);
-  const hits = raycaster.intersectObjects(current,true);
+  const hits = raycaster.intersectObjects([left,right]);
 
   if(hits.length){
-    const obj = hits[0].object;
-
-    const parent = current.find(o=>o===obj || o.children.includes(obj));
-
-    if(parent && parent !== current[1]){
-      transform.attach(parent);
-    }
+    transform.attach(hits[0].object);
   }else{
     transform.detach();
   }
 });
 
 /* MEDIDAS */
-function size(o){
-  const box = new THREE.Box3().setFromObject(o);
-  const v = new THREE.Vector3();
-  box.getSize(v);
-  return v;
+function getSize(obj){
+  return {
+    x:(obj.scale.x*2).toFixed(1),
+    y:(obj.scale.y*2).toFixed(1),
+    z:(obj.scale.z*2).toFixed(1)
+  };
 }
 
 function label(obj,el){
@@ -201,35 +159,33 @@ function label(obj,el){
   el.style.left = (v.x*0.5+0.5)*innerWidth+"px";
   el.style.top = (-v.y*0.5+0.5)*innerHeight+"px";
 
-  const s = size(obj);
-  el.innerText = `${s.x.toFixed(1)}×${s.y.toFixed(1)}×${s.z.toFixed(1)}`;
+  const s = getSize(obj);
+  el.innerText = `${s.x}×${s.y}×${s.z}`;
 }
 
 /* CHECK */
 window.check = function(){
 
-  const [l,c,r] = current;
+  const base = getSize(center);
+  const half = getSize(left);
+  const double = getSize(right);
 
-  const bs = size(c);
-  const ls = size(l);
-  const rs = size(r);
+  const okLeft =
+    Math.abs(half.x - base.x/2) < 0.3 &&
+    Math.abs(half.y - base.y/2) < 0.3 &&
+    Math.abs(half.z - base.z/2) < 0.3;
 
-  const okL =
-    Math.abs(ls.x - bs.x/2) < 0.3 &&
-    Math.abs(ls.y - bs.y/2) < 0.3 &&
-    Math.abs(ls.z - bs.z/2) < 0.3;
+  const okRight =
+    Math.abs(double.x - base.x*2) < 0.3 &&
+    Math.abs(double.y - base.y*2) < 0.3 &&
+    Math.abs(double.z - base.z*2) < 0.3;
 
-  const okR =
-    Math.abs(rs.x - bs.x*2) < 0.3 &&
-    Math.abs(rs.y - bs.y*2) < 0.3 &&
-    Math.abs(rs.z - bs.z*2) < 0.3;
-
-  l.traverse(m=>m.material && m.material.color.set(okL?"green":"red"));
-  r.traverse(m=>m.material && m.material.color.set(okR?"green":"red"));
+  left.material.color.set(okLeft ? "green":"red");
+  right.material.color.set(okRight ? "green":"red");
 
   const feedback = document.getElementById("feedback");
 
-  if(okL && okR){
+  if(okLeft && okRight){
     feedback.innerText="🔥 NIVEL SUPERADO";
     feedback.style.color="green";
 
@@ -237,6 +193,7 @@ window.check = function(){
       level = (level+1)%levels.length;
       loadLevel();
     },1000);
+
   }else{
     feedback.innerText="❌ Revisa proporciones";
     feedback.style.color="red";
@@ -248,15 +205,19 @@ function animate(){
   requestAnimationFrame(animate);
   controls.update();
 
-  label(current[0],l1);
-  label(current[1],l2);
-  label(current[2],l3);
+  label(left,l1);
+  label(center,l2);
+  label(right,l3);
 
   renderer.render(scene,camera);
 }
 animate();
 
-loadLevel();
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
 
 </script>
 
