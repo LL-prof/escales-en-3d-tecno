@@ -3,11 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Escalas 3D - Niveles</title>
+<title>Escalas 3D</title>
 
 <style>
 html,body{margin:0;height:100%;overflow:hidden;font-family:Arial}
 canvas{display:block}
+
+#ui{
+  position:fixed;top:10px;left:50%;
+  transform:translateX(-50%);
+  background:rgba(255,255,255,.9);
+  padding:10px 20px;
+  border-radius:12px;
+  box-shadow:0 4px 10px rgba(0,0,0,.2);
+  text-align:center;
+}
 
 .label{
   position:absolute;
@@ -16,17 +26,6 @@ canvas{display:block}
   border-radius:6px;
   font-weight:bold;
   font-size:12px;
-}
-
-#ui{
-  position:fixed;
-  top:10px;
-  left:50%;
-  transform:translateX(-50%);
-  background:white;
-  padding:10px;
-  border-radius:10px;
-  text-align:center;
 }
 </style>
 
@@ -42,7 +41,7 @@ canvas{display:block}
 <body>
 
 <div id="ui">
-  ⬅️ MITAD | MODELO | DOBLE ➡️<br>
+  ⬅️ MITAD (1:2) | MODELO | DOBLE (2:1) ➡️<br>
   <button onclick="check()">✔ COMPROBAR</button>
   <div id="feedback"></div>
 </div>
@@ -60,20 +59,24 @@ import {TransformControls} from "https://cdn.jsdelivr.net/npm/three@0.160.0/exam
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf0f0f0);
 
-const camera = new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,100);
-camera.position.set(8,8,12);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(10,10,14);
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth,innerHeight);
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const controls = new OrbitControls(camera,renderer.domElement);
-scene.add(new THREE.AmbientLight(0xffffff,1));
+const controls = new OrbitControls(camera, renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff,0.8));
+const light = new THREE.DirectionalLight(0xffffff,0.6);
+light.position.set(10,20,10);
+scene.add(light);
 
 scene.add(new THREE.GridHelper(20,20));
 
 /* TRANSFORM */
-const transform = new TransformControls(camera,renderer.domElement);
+const transform = new TransformControls(camera, renderer.domElement);
 transform.setMode("scale");
 scene.add(transform);
 
@@ -81,7 +84,7 @@ transform.addEventListener("dragging-changed", e=>{
   controls.enabled = !e.value;
 });
 
-/* ----------- FORMAS ----------- */
+/* -------- FORMAS -------- */
 
 function cube(){
   return new THREE.Mesh(
@@ -136,11 +139,12 @@ function arrow(){
 const levels = [cube, rect, tower, L, arrow];
 let level = 0;
 
-/* ----------- CARGA ----------- */
+/* -------- CARGA -------- */
 
 let current = [];
 
-function load(){
+function loadLevel(){
+
   current.forEach(o=>scene.remove(o));
 
   const shape = levels[level];
@@ -149,13 +153,14 @@ function load(){
   const center = shape();
   const right = shape();
 
-  left.position.set(-4,1,0);
+  left.position.set(-5,1,0);
   center.position.set(0,1,0);
-  right.position.set(4,1,0);
+  right.position.set(5,1,0);
 
   scene.add(left,center,right);
 
   current = [left,center,right];
+
   transform.detach();
 }
 
@@ -172,6 +177,7 @@ renderer.domElement.addEventListener("click",(e)=>{
 
   if(hits.length){
     const obj = hits[0].object;
+
     const parent = current.find(o=>o===obj || o.children.includes(obj));
 
     if(parent && parent !== current[1]){
@@ -201,27 +207,39 @@ function label(obj,el){
 
 /* CHECK */
 window.check = function(){
+
   const [l,c,r] = current;
 
   const bs = size(c);
   const ls = size(l);
   const rs = size(r);
 
-  const okL = Math.abs(ls.x-bs.x/2)<0.3 && Math.abs(ls.y-bs.y/2)<0.3 && Math.abs(ls.z-bs.z/2)<0.3;
-  const okR = Math.abs(rs.x-bs.x*2)<0.3 && Math.abs(rs.y-bs.y*2)<0.3 && Math.abs(rs.z-bs.z*2)<0.3;
+  const okL =
+    Math.abs(ls.x - bs.x/2) < 0.3 &&
+    Math.abs(ls.y - bs.y/2) < 0.3 &&
+    Math.abs(ls.z - bs.z/2) < 0.3;
+
+  const okR =
+    Math.abs(rs.x - bs.x*2) < 0.3 &&
+    Math.abs(rs.y - bs.y*2) < 0.3 &&
+    Math.abs(rs.z - bs.z*2) < 0.3;
 
   l.traverse(m=>m.material && m.material.color.set(okL?"green":"red"));
   r.traverse(m=>m.material && m.material.color.set(okR?"green":"red"));
 
+  const feedback = document.getElementById("feedback");
+
   if(okL && okR){
-    document.getElementById("feedback").innerText="🔥 NIVEL SUPERADO";
+    feedback.innerText="🔥 NIVEL SUPERADO";
+    feedback.style.color="green";
 
     setTimeout(()=>{
       level = (level+1)%levels.length;
-      load();
+      loadLevel();
     },1000);
   }else{
-    document.getElementById("feedback").innerText="❌ Revisa proporciones";
+    feedback.innerText="❌ Revisa proporciones";
+    feedback.style.color="red";
   }
 };
 
@@ -238,7 +256,7 @@ function animate(){
 }
 animate();
 
-load();
+loadLevel();
 
 </script>
 
