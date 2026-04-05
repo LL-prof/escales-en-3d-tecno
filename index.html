@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Escalas 3D</title>
+
+<style>
+html,body{margin:0;height:100%;overflow:hidden;font-family:Arial}
+canvas{display:block}
+
+#ui{
+  position:fixed;top:10px;left:50%;
+  transform:translateX(-50%);
+  background:rgba(255,255,255,.9);
+  padding:10px 20px;
+  border-radius:12px;
+  box-shadow:0 4px 10px rgba(0,0,0,.2);
+  text-align:center;
+}
+
+button{
+  padding:10px 15px;
+  margin:5px;
+  border-radius:10px;
+  border:2px solid #ccc;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.info{
+  font-weight:bold;
+  margin-top:5px;
+}
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+
+<body>
+
+<div id="ui">
+  <div>⬅️ MITAD (1:2) | MODELO | DOBLE (2:1) ➡️</div>
+  <button onclick="check()">✔ COMPROBAR</button>
+  <div id="feedback"></div>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+
+/* ESCENA */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf0f0f0);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(10,10,14);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff,0.8));
+const light = new THREE.DirectionalLight(0xffffff,0.6);
+light.position.set(10,20,10);
+scene.add(light);
+
+scene.add(new THREE.GridHelper(20,20));
+
+/* FIGURAS */
+const geo = new THREE.BoxGeometry(2,2,2);
+
+function createFigure(x){
+  const mat = new THREE.MeshStandardMaterial({color:0x4da3ff});
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x,1,0);
+  scene.add(m);
+  return m;
+}
+
+const left = createFigure(-5);
+const center = createFigure(0);
+const right = createFigure(5);
+
+/* MEDIDAS */
+function getSize(obj){
+  return {
+    x:(obj.scale.x*2).toFixed(1),
+    y:(obj.scale.y*2).toFixed(1),
+    z:(obj.scale.z*2).toFixed(1)
+  };
+}
+
+/* INTERACCIÓN SIMPLE (teclas) */
+window.addEventListener("keydown",(e)=>{
+  const step=0.1;
+
+  if(e.key==="a") left.scale.x+=step;
+  if(e.key==="z") left.scale.x-=step;
+
+  if(e.key==="s") left.scale.y+=step;
+  if(e.key==="x") left.scale.y-=step;
+
+  if(e.key==="d") left.scale.z+=step;
+  if(e.key==="c") left.scale.z-=step;
+
+  if(e.key==="j") right.scale.x+=step;
+  if(e.key==="n") right.scale.x-=step;
+
+  if(e.key==="k") right.scale.y+=step;
+  if(e.key==="m") right.scale.y-=step;
+
+  if(e.key==="l") right.scale.z+=step;
+  if(e.key=",") right.scale.z-=step;
+});
+
+/* CHECK */
+function check(){
+
+  const base = getSize(center);
+  const half = getSize(left);
+  const double = getSize(right);
+
+  let okLeft =
+    Math.abs(half.x - base.x/2) < 0.3 &&
+    Math.abs(half.y - base.y/2) < 0.3 &&
+    Math.abs(half.z - base.z/2) < 0.3;
+
+  let okRight =
+    Math.abs(double.x - base.x*2) < 0.3 &&
+    Math.abs(double.y - base.y*2) < 0.3 &&
+    Math.abs(double.z - base.z*2) < 0.3;
+
+  left.material.color.set(okLeft ? "green":"red");
+  right.material.color.set(okRight ? "green":"red");
+
+  const feedback = document.getElementById("feedback");
+
+  if(okLeft && okRight){
+    feedback.innerText="🔥 PERFECTO";
+    feedback.style.color="green";
+  }else{
+    feedback.innerText="❌ Revisa proporciones";
+    feedback.style.color="red";
+  }
+}
+
+/* LOOP */
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene,camera);
+}
+animate();
+
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+</script>
+
+</body>
+</html>
